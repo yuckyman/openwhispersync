@@ -11,7 +11,7 @@ console = Console()
 
 def main():
     # Test with chapter 1 of frankenstein
-    audio_path = Path(__file__).parent.parent / "files" / "frankenstein" / "frankenstein_01_shelley_64kb.mp3"
+    audio_path = Path(__file__).parent.parent / "files" / "frankenstein" / "frankenstein_02_shelley_64kb.mp3"
     
     console.print("[bold green]Starting whisper transcription test...[/bold green]")
     console.print(f"Processing: {audio_path}")

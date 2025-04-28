@@ -6,7 +6,9 @@ from .core import (
     transcribe_audio,
     split_ebook,
     match_text,
-    save_alignment
+    save_alignment,
+    process_all_chapters,
+    match_chapters
 )
 from .ebook import parse_epub
 
@@ -14,7 +16,7 @@ console = Console()
 
 @click.group()
 def main():
-    """Whisperless: Lightweight audiobook alignment"""
+    """OpenWhisperSync: Lightweight audiobook alignment"""
     pass
 
 @main.command()
@@ -61,6 +63,27 @@ def parse(ebook, out):
         json.dump(sentences, f, indent=2)
     
     console.print(f"[green]✓[/green] Extracted {len(sentences)} sentences to [bold]{out}[/bold]")
+
+@main.command()
+@click.option("--audio-dir", required=True, help="Directory containing MP3 chapter files")
+@click.option("--out", default="transcriptions.json", help="Output JSON file for transcriptions")
+def transcribe(audio_dir, out):
+    """Transcribe all audio chapters"""
+    chapters = process_all_chapters(audio_dir, out)
+    console.print(f"[green]✓[/green] Transcribed {len(chapters)} chapters! Output saved to [bold]{out}[/bold]")
+
+@main.command()
+@click.option("--transcriptions", required=True, help="Path to transcriptions JSON file")
+@click.option("--ebook", required=True, help="Path to ebook file")
+@click.option("--out-dir", default="alignments", help="Directory to save alignment results")
+def align(transcriptions, ebook, out_dir):
+    """Align transcribed audio with ebook text"""
+    with Progress() as progress:
+        task = progress.add_task("[cyan]Matching chapters...", total=None)
+        match_chapters(transcriptions, ebook, out_dir)
+        progress.update(task, completed=True)
+    
+    console.print(f"[green]✓[/green] Alignment complete! Results saved to [bold]{out_dir}[/bold]")
 
 if __name__ == "__main__":
     main() 

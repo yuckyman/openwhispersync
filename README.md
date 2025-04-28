@@ -1,25 +1,34 @@
- # Whisperless
+# OpenWhisperSync
 
-Lightweight CLI tool for aligning audiobooks with their ebook counterparts.
+Lightweight audiobook alignment tool using OpenAI's Whisper.
 
 ## Installation
 
 ```bash
-pip install whisperless
+pip install openwhispersync
 ```
 
 ## Usage
 
+Align an audiobook with its ebook:
+
 ```bash
-whisperless align --audio book.m4b --ebook book.epub --out sync.json
+openwhispersync align --audio book.m4b --ebook book.epub --out sync.json
 ```
 
-### Options
+Process all chapters in a directory:
 
-- `--audio`: Path to audio file (required)
-- `--ebook`: Path to ebook file (required)
-- `--out`: Output JSON file (default: sync.json)
-- `--chunk-size`: Processing chunk size (default: 5m)
+```bash
+openwhispersync transcribe --audio-dir /path/to/chapters --out transcriptions.json
+```
+
+## Features
+
+- Uses OpenAI's Whisper for accurate transcription
+- Supports both MP3 and M4B audio formats
+- Handles chapter-based audiobooks
+- Preserves word-level timestamps
+- Efficient fuzzy matching for alignment
 
 ## How it Works
 
