@@ -4,11 +4,13 @@ from typing import List, Tuple, Dict
 import whisper
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
+import logging
 from .ebook import parse_epub
 from .audio import AudioProcessor
 from .matcher import TextMatcher
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 def parse_chunk_size(chunk_size: str) -> int:
     """Convert chunk size string (e.g. '5m') to seconds"""
@@ -33,7 +35,8 @@ def split_ebook(ebook_path: str) -> Tuple[List[str], Dict[int, str]]:
 
 def match_text(audio_words: List[Dict], 
               ebook_sentences: List[str],
-              audio_path: str = None) -> List[Dict]:
+              audio_path: str = None,
+              silent_regions: List[Tuple[float, float]] = None) -> List[Dict]:
     """
     Match transcribed audio with ebook text.
     
@@ -41,13 +44,13 @@ def match_text(audio_words: List[Dict],
         audio_words: List of word dicts with 'text', 'start', 'end'
         ebook_sentences: List of sentences from ebook
         audio_path: Optional path to audio file for silence detection
+        silent_regions: Optional list of (start, end) silence timestamps from transcription
         
     Returns:
         List of alignment dicts with 'sentence', 'start', 'end', 'confidence'
     """
-    # get silent regions if audio path provided
-    silent_regions = None
-    if audio_path:
+    # use provided silent regions or get them from audio if path provided
+    if silent_regions is None and audio_path:
         processor = AudioProcessor(audio_path)
         features = processor.process_chapter()
         silent_regions = features.silent_regions
@@ -60,8 +63,8 @@ def match_text(audio_words: List[Dict],
     return [
         {
             'sentence': r.sentence,
-            'start': r.start_time,
-            'end': r.end_time,
+            'start_time': r.start_time,
+            'end_time': r.end_time,
             'confidence': r.confidence,
             'matched_text': r.matched_text,
             'is_silence_based': r.is_silence_based
@@ -120,7 +123,11 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
         for i, mp3_path in enumerate(mp3_files, start=1):
             task = progress.add_task(f"[cyan]Processing audio for chapter {i}...", total=len(mp3_files))
             
-            # transcribe audio
+            # get audio features first
+            processor = AudioProcessor(str(mp3_path))
+            features = processor.process_chapter()
+            
+            # then do whisper transcription
             result = model.transcribe(
                 str(mp3_path),
                 word_timestamps=True,
@@ -140,13 +147,14 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
             # calculate duration from last word's end time
             duration = words[-1]["end"] if words else 0
             
-            # add chapter info
+            # store everything we need
             chapters.append({
                 "number": i,
                 "filename": mp3_path.name,
-                "duration": duration,
+                "duration": features.duration,
                 "word_count": len(words),
-                "words": words
+                "words": words,
+                "silent_regions": features.silent_regions
             })
             
             progress.update(task, advance=1)
@@ -163,7 +171,9 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
     
     return chapters
 
-def match_book(audio_data: Dict, ebook_sentences: List[str], chapter_markers: Dict[int, str], audio_json_path: str) -> Dict[int, List[Dict]]:
+def match_book(audio_data: Dict, ebook_sentences: List[str], 
+               chapter_markers: Dict[int, Tuple[str, int]], 
+               audio_json_path: str) -> Dict[int, List[Dict]]:
     """
     Match entire audiobook with ebook text at once.
     
@@ -182,88 +192,59 @@ def match_book(audio_data: Dict, ebook_sentences: List[str], chapter_markers: Di
     
     # concatenate all audio words and adjust timestamps
     all_audio_words = []
+    all_silent_regions = []
     time_offset = 0.0
     
-    # first pass: calculate total duration of each chapter
-    chapter_durations = {}
     for chapter in audio_data["chapters"]:
-        audio_path = Path(audio_json_path).parent / chapter["filename"]
-        processor = AudioProcessor(str(audio_path))
-        features = processor.process_chapter()
-        chapter_durations[chapter["number"]] = features.duration
-    
-    # second pass: concatenate words with adjusted timestamps
-    for chapter in audio_data["chapters"]:
+        # adjust word timestamps
         for word in chapter["words"]:
             adjusted_word = word.copy()
             adjusted_word["start"] += time_offset
             adjusted_word["end"] += time_offset
             all_audio_words.append(adjusted_word)
-        time_offset += chapter_durations[chapter["number"]]
-    
-    # get silent regions for the entire book
-    all_silent_regions = []
-    time_offset = 0.0
-    for chapter in audio_data["chapters"]:
-        audio_path = Path(audio_json_path).parent / chapter["filename"]
-        processor = AudioProcessor(str(audio_path))
-        features = processor.process_chapter()
-        for start, end in features.silent_regions:
-            all_silent_regions.append((start + time_offset, end + time_offset))
-        time_offset += features.duration
+            
+        # adjust silent region timestamps if they exist
+        if "silent_regions" in chapter:
+            for start, end in chapter["silent_regions"]:
+                all_silent_regions.append((start + time_offset, end + time_offset))
+            
+        time_offset += chapter["duration"]
     
     # create matcher and match entire book
     matcher = TextMatcher(all_audio_words, ebook_sentences)
     all_results = matcher.match(all_audio_words, ebook_sentences, all_silent_regions)
     
-    # split results back into chapters
-    chapter_results = {}
-    current_chapter = 0
-    current_results = []
+    # get chapter boundaries with pre-parsed numbers
+    chapter_boundaries = {
+        num: idx for idx, (_, num) in chapter_markers.items()
+    }
     
-    # find chapter boundaries in ebook
-    chapter_boundaries = {}
-    for idx, marker in chapter_markers.items():
-        if "chapter" in marker.lower() or "letter" in marker.lower():
-            # extract chapter number from marker
-            words = marker.lower().split()
-            if "chapter" in words:
-                num_idx = words.index("chapter") + 1
-            else:
-                num_idx = words.index("letter") + 1
-            try:
-                chapter_num = int(words[num_idx])
-                chapter_boundaries[chapter_num] = idx
-            except (ValueError, IndexError):
-                continue
-    
-    # sort chapter boundaries
+    # sort chapters by number
     sorted_chapters = sorted(chapter_boundaries.keys())
     
+    if not sorted_chapters:
+        logger.warning("No chapter markers found, treating entire book as chapter 1")
+        chapter_results = {1: []}
+        for result in all_results:
+            chapter_results[1].append(result_to_dict(result))
+        return chapter_results
+    
     # assign results to chapters based on sentence indices
+    chapter_results = {}
     for result in all_results:
         # find which chapter this result belongs to
-        result_chapter = 0
+        chapter_num = 1  # default to first chapter
         for i in range(len(sorted_chapters) - 1):
-            if result.sentence_idx >= chapter_boundaries[sorted_chapters[i]] and \
-               result.sentence_idx < chapter_boundaries[sorted_chapters[i + 1]]:
-                result_chapter = sorted_chapters[i]
+            if (result.sentence_idx >= chapter_boundaries[sorted_chapters[i]] and
+                result.sentence_idx < chapter_boundaries[sorted_chapters[i + 1]]):
+                chapter_num = sorted_chapters[i]
                 break
         else:
-            # if not found in any chapter, assign to last chapter
-            result_chapter = sorted_chapters[-1]
-        
-        # add to appropriate chapter's results
-        if result_chapter not in chapter_results:
-            chapter_results[result_chapter] = []
-        chapter_results[result_chapter].append({
-            'sentence': result.sentence,
-            'start': result.start_time,
-            'end': result.end_time,
-            'confidence': result.confidence,
-            'matched_text': result.matched_text,
-            'is_silence_based': result.is_silence_based
-        })
+            chapter_num = sorted_chapters[-1]  # last chapter
+            
+        if chapter_num not in chapter_results:
+            chapter_results[chapter_num] = []
+        chapter_results[chapter_num].append(result_to_dict(result))
     
     return chapter_results
 

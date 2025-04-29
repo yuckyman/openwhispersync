@@ -12,6 +12,8 @@ from .core import (
 )
 from .ebook import parse_epub
 from rich.table import Table
+import os.path
+from pathlib import Path
 
 console = Console()
 
@@ -91,6 +93,20 @@ def transcribe(audio_dir, out):
 @click.option("--out-dir", default="alignments", help="Directory to save alignment results")
 def align(transcriptions, ebook, out_dir):
     """Align transcribed audio with ebook text"""
+    # Check if files exist
+    if not os.path.isfile(transcriptions):
+        console.print(f"[red]Error:[/red] Transcriptions file not found: [bold]{transcriptions}[/bold]")
+        console.print(f"[yellow]Tip:[/yellow] Make sure the path is correct and the file exists.")
+        return
+        
+    if not os.path.isfile(ebook):
+        console.print(f"[red]Error:[/red] Ebook file not found: [bold]{ebook}[/bold]")
+        console.print(f"[yellow]Tip:[/yellow] Make sure the path is correct and the file exists.")
+        return
+    
+    # Create output directory if it doesn't exist
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    
     with Progress() as progress:
         task = progress.add_task("[cyan]Matching chapters...", total=None)
         match_chapters(transcriptions, ebook, out_dir)
