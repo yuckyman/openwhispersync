@@ -5,6 +5,9 @@ import numpy as np
 import librosa
 import logging
 from dataclasses import dataclass
+import whisper
+import glob
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +29,9 @@ class AudioFeatures:
     
     # silence detection
     silent_regions: List[tuple]  # list of (start, end) in seconds
+    
+    # transcription
+    transcription: Optional[Dict] = None
 
 class AudioProcessor:
     """Handles audio file processing for both MP3 and M4B formats."""
@@ -83,15 +89,37 @@ class AudioProcessor:
         zero_crossing_rate = librosa.feature.zero_crossing_rate(samples)[0]
         
         # silence detection (threshold at -50dB)
-        silent_regions = librosa.effects.split(
+        non_silent_regions = librosa.effects.split(
             samples, 
-            top_db=50,
+            top_db=40,
             frame_length=2048,
             hop_length=512
         )
-        # convert frame indices to seconds
-        silent_regions = [(start/sample_rate, end/sample_rate) 
-                         for start, end in silent_regions]
+        
+        # convert non-silent regions to silent regions by finding gaps
+        silent_regions = []
+        if len(non_silent_regions) > 0:
+            # add initial silence if it exists
+            if non_silent_regions[0][0] > 0:
+                silent_regions.append((0, non_silent_regions[0][0]/sample_rate))
+            
+            # add silence between non-silent regions
+            for i in range(len(non_silent_regions)-1):
+                silent_regions.append((
+                    non_silent_regions[i][1]/sample_rate,
+                    non_silent_regions[i+1][0]/sample_rate
+                ))
+            
+            # add final silence if it exists
+            if non_silent_regions[-1][1] < len(samples):
+                silent_regions.append((
+                    non_silent_regions[-1][1]/sample_rate,
+                    len(samples)/sample_rate
+                ))
+        
+        logger.info(f"Found {len(silent_regions)} silent regions")
+        for i, (start, end) in enumerate(silent_regions):
+            logger.info(f"  Silent region {i+1}: {start:.2f}s - {end:.2f}s")
         
         logger.info("Feature extraction complete!")
         
@@ -116,4 +144,66 @@ class AudioProcessor:
             logger.info(f"Exported audio to: {output_path}")
         except Exception as e:
             logger.error(f"Failed to export audio: {e}")
-            raise 
+            raise
+
+class AudioTranscriber:
+    """Handles transcription of multiple audio files using whisper."""
+    
+    def __init__(self, model_name: str = "base"):
+        self.model = whisper.load_model(model_name)
+        self.processors: Dict[str, AudioProcessor] = {}
+        
+    def load_directory(self, directory: Union[str, Path]) -> None:
+        """Load all mp3 files from a directory."""
+        directory = Path(directory)
+        mp3_files = sorted(glob.glob(str(directory / "*.mp3")))
+        
+        logger.info(f"Found {len(mp3_files)} mp3 files in {directory}")
+        
+        for mp3_file in mp3_files:
+            processor = AudioProcessor(mp3_file)
+            self.processors[mp3_file] = processor
+            
+    def transcribe_all(self) -> Dict[str, Dict]:
+        """Transcribe all loaded audio files."""
+        transcriptions = {}
+        
+        for path, processor in self.processors.items():
+            logger.info(f"Transcribing {path}...")
+            
+            # get audio as numpy array
+            samples, sample_rate = processor.get_numpy_array()
+            
+            # transcribe
+            result = self.model.transcribe(samples)
+            
+            # store result
+            transcriptions[path] = result
+            
+            # add to processor's features
+            features = processor.process_chapter()
+            features.transcription = result
+            
+        return transcriptions
+    
+    def save_transcriptions(self, output_file: Union[str, Path]) -> None:
+        """Save all transcriptions to a json file."""
+        transcriptions = self.transcribe_all()
+        
+        with open(output_file, 'w') as f:
+            json.dump(transcriptions, f, indent=2)
+            
+        logger.info(f"Saved transcriptions to {output_file}")
+
+if __name__ == '__main__':
+    import sys
+    if len(sys.argv) != 3:
+        print("Usage: python -m openwhispersync.audio <audio_directory> <output_file>")
+        sys.exit(1)
+        
+    audio_dir = sys.argv[1]
+    output_file = sys.argv[2]
+    
+    transcriber = AudioTranscriber()
+    transcriber.load_directory(audio_dir)
+    transcriber.save_transcriptions(output_file) 

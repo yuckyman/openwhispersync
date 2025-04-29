@@ -10,40 +10,99 @@ pip install openwhispersync
 
 ## Usage
 
-Align an audiobook with its ebook:
+### 1. Transcribe Audio
+First, transcribe your audiobook chapters:
 
 ```bash
-openwhispersync align --audio book.m4b --ebook book.epub --out sync.json
+openwhispersync transcribe --audio-dir /path/to/chapters --out transcriptions/
 ```
 
-Process all chapters in a directory:
+This creates a directory with chapter-based transcription files:
+```
+transcriptions/
+├── chapter_1_transcription.json
+├── chapter_2_transcription.json
+└── ...
+```
+
+### 2. Align with Ebook
+Next, align the transcriptions with your ebook:
 
 ```bash
-openwhispersync transcribe --audio-dir /path/to/chapters --out transcriptions.json
+openwhispersync align --transcriptions transcriptions/ --ebook book.epub --out-dir alignments/
+```
+
+This creates a directory with chapter-based alignment files:
+```
+alignments/
+├── chapter_1_alignment.json
+├── chapter_2_alignment.json
+└── ...
+```
+
+### 3. Visualize Results
+Finally, generate visualizations to verify the alignment:
+
+```bash
+openwhispersync visualize \
+  --audio chapter.mp3 \
+  --alignment alignments/chapter_1_alignment.json \
+  --out-dir visualizations \
+  --show
 ```
 
 ## Features
 
-- Uses OpenAI's Whisper for accurate transcription
-- Supports both MP3 and M4B audio formats
-- Handles chapter-based audiobooks
-- Preserves word-level timestamps
-- Efficient fuzzy matching for alignment
+- **Accurate Transcription**: Uses OpenAI's Whisper (base model) for high-quality transcription
+- **Smart Alignment**: Hybrid approach combining:
+  - Silence detection for natural speech boundaries
+  - Fuzzy text matching with rapidfuzz
+  - Confidence scoring for alignment quality
+- **Format Support**:
+  - MP3 and M4B audio formats
+  - EPUB ebook format
+  - Chapter-based audiobook handling
+- **Visualization Tools**:
+  - Audio waveform with aligned sentences
+  - Silence region highlighting
+  - Confidence score visualization
+- **Performance Optimized**:
+  - Parallel processing for long audio files
+  - Memory-efficient processing (<2GB)
+  - Fast processing speed (~1.67x realtime)
 
 ## How it Works
 
-1. **Transcribe**: Uses Whisper (tiny model) to transcribe the audio
-2. **Split**: Splits the ebook into sentences
-3. **Match**: Uses fuzzy matching to align audio segments with text
-4. **Output**: Saves alignment data as JSON
+1. **Audio Processing**:
+   - Detect silent regions for natural speech boundaries
+   - Transcribe audio using Whisper (base model)
+   - Extract word-level timestamps
+
+2. **Text Processing**:
+   - Parse EPUB files with proper chapter handling
+   - Split text into sentences with smart punctuation handling
+   - Preserve chapter markers and structure
+
+3. **Alignment**:
+   - Use silence detection to identify potential sentence boundaries
+   - Apply fuzzy matching to align audio segments with text
+   - Score alignments based on multiple confidence signals
+
+4. **Output**:
+   - Save alignment data as JSON
+   - Generate visualizations for debugging
+   - Support chapter-based organization
 
 ## Requirements
 
 - Python 3.9+
 - ffmpeg
-- whisper (tiny model)
+- whisper (base model)
 - ebooklib
 - rapidfuzz
+- sounddevice (for GUI)
+- soundfile (for GUI)
+- matplotlib (for visualization)
 
 ## License
 

@@ -1,0 +1,18 @@
+[
+  {
+    "sentence": "I arrived here yesterday, and my first task is to assure my dear sister of my welfare and increasing confidence in the success of my undertaking.",
+    "start": 614.7,
+    "end": 618.8,
+    "confidence": 0.5024137931034484,
+    "matched_text": "and my father i had the dead to read in ascertain my fate",
+    "is_silence_based": false
+  },
+  {
+    "sentence": "I am already far north of London, and as I walk in the streets of Petersburgh, I feel a cold northern breeze play upon my cheeks, which braces my nerves and fills me with delight.",
+    "start": 620.9,
+    "end": 622.56,
+    "confidence": 0.5216931216931218,
+    "matched_text": "the fiend followed me and might",
+    "is_silence_based": false
+  }
+]

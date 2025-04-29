@@ -1,0 +1,42 @@
+[
+  {
+    "sentence": "You will rejoice to hear that no disaster has accompanied the commencement of an enterprise which you have regarded with such evil forebodings.",
+    "start": 2109.9,
+    "end": 2112.3,
+    "confidence": 0.5003921568627451,
+    "matched_text": "i sat watching the wahn countenance of",
+    "is_silence_based": false
+  },
+  {
+    "sentence": "I am already far north of London, and as I walk in the streets of Petersburgh, I feel a cold northern breeze play upon my cheeks, which braces my nerves and fills me with delight.",
+    "start": 2118.22,
+    "end": 2120.86,
+    "confidence": 0.5070921985815603,
+    "matched_text": "a dozen of the sailors who demanded admission into the",
+    "is_silence_based": false
+  },
+  {
+    "sentence": "I try in vain to be persuaded that the pole is the seat of frost and desolation; it ever presents itself to my imagination as the region of beauty and delight.",
+    "start": 2127.9,
+    "end": 2129.74,
+    "confidence": 0.5030065359477124,
+    "matched_text": "sailors to come in deputation to",
+    "is_silence_based": false
+  },
+  {
+    "sentence": "There\u2014for with your leave, my sister, I will put some trust in preceding navigators\u2014there snow and frost are banished; and, sailing over a calm sea, we may be wafted to a land surpassing in wonders and in beauty every region hitherto discovered on the habitable globe.",
+    "start": 2130.42,
+    "end": 2131.98,
+    "confidence": 0.5026666666666667,
+    "matched_text": "to make a requisition which",
+    "is_silence_based": false
+  },
+  {
+    "sentence": "I shall satiate my ardent curiosity with the sight of a part of the world never before visited, and may tread a land never before imprinted by the foot of man.",
+    "start": 2139.58,
+    "end": 2143.84,
+    "confidence": 0.5058503401360543,
+    "matched_text": "but they feared that if as was possible the ice should dissipate and a free",
+    "is_silence_based": false
+  }
+]
