@@ -7,7 +7,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 import logging
 from .ebook import parse_epub
 from .audio import AudioProcessor
-from .matcher import TextMatcher
+from .matcher import TextMatcher, SilenceRegion
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -67,7 +67,8 @@ def match_text(audio_words: List[Dict],
             'end_time': r.end_time,
             'confidence': r.confidence,
             'matched_text': r.matched_text,
-            'is_silence_based': r.is_silence_based
+            'is_silence_based': r.is_silence_based,
+            'punctuation_score': r.punctuation_score
         }
         for r in results
     ]
@@ -127,6 +128,24 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
             processor = AudioProcessor(str(mp3_path))
             features = processor.process_chapter()
             
+            # Categorize silent regions by duration
+            categorized_silences = []
+            for start, end in features.silent_regions:
+                duration = end - start
+                if duration < 0.4:
+                    silence_type = "brief"  # Potential commas, minor breaks
+                elif duration < 1.0:
+                    silence_type = "medium"  # Potential sentence boundaries
+                else:
+                    silence_type = "long"  # Paragraph breaks, chapter transitions
+                
+                categorized_silences.append({
+                    "start": start,
+                    "end": end,
+                    "duration": duration,
+                    "type": silence_type
+                })
+            
             # then do whisper transcription
             result = model.transcribe(
                 str(mp3_path),
@@ -154,7 +173,8 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
                 "duration": features.duration,
                 "word_count": len(words),
                 "words": words,
-                "silent_regions": features.silent_regions
+                "silent_regions": features.silent_regions,
+                "categorized_silences": categorized_silences
             })
             
             progress.update(task, advance=1)
@@ -256,6 +276,26 @@ def match_chapters(audio_json: str, ebook_path: str, output_dir: str):
             # Get audio words and silent regions for this chapter
             audio_words = audio_chapter_data.get("words", [])
             silent_regions = audio_chapter_data.get("silent_regions")
+            categorized_silences = audio_chapter_data.get("categorized_silences")
+            
+            # If categorized_silences is missing, generate it from silent_regions
+            if not categorized_silences and silent_regions:
+                categorized_silences = []
+                for start, end in silent_regions:
+                    duration = end - start
+                    if duration < 0.4:
+                        silence_type = "brief"
+                    elif duration < 1.0:
+                        silence_type = "medium"
+                    else:
+                        silence_type = "long"
+                    
+                    categorized_silences.append({
+                        "start": start,
+                        "end": end,
+                        "duration": duration,
+                        "type": silence_type
+                    })
 
             if not audio_words:
                 logger.warning(f"No audio words found for Chapter {chapter_num}. Skipping.")
@@ -287,7 +327,8 @@ def match_chapters(audio_json: str, ebook_path: str, output_dir: str):
                     'end_time': r.end_time,
                     'confidence': r.confidence,
                     'matched_text': r.matched_text,
-                    'is_silence_based': r.is_silence_based
+                    'is_silence_based': r.is_silence_based,
+                    'punctuation_score': r.punctuation_score
                 })
 
             # Save results for this chapter

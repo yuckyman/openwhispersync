@@ -14,6 +14,7 @@ from .ebook import parse_epub
 from rich.table import Table
 import os.path
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 console = Console()
 
@@ -114,33 +115,73 @@ def align(transcriptions, ebook, out_dir):
 @click.option("--alignment", required=True, help="Path to alignment JSON file")
 @click.option("--out-dir", default="visualizations", help="Directory to save plots")
 @click.option("--show", is_flag=True, help="Show plots interactively")
-def visualize(audio, alignment, out_dir, show):
+@click.option("--zoom-start", type=float, default=None, help="Start time (seconds) for time-based plot zoom")
+@click.option("--zoom-duration", type=float, default=4.0, help="Duration (seconds) for time-based plot zoom")
+def visualize(audio, alignment, out_dir, show, zoom_start, zoom_duration):
     """Visualize audio alignment results"""
     from pathlib import Path
-    from .visualize import plot_alignment, plot_silence_regions, plot_alignment_confidence
+    from .visualize import plot_alignment, plot_silence_regions, plot_alignment_confidence, plot_alignment_scatter
     
     # create output directory
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    # generate plots
+    # --- Load alignment data once ---
+    alignment_data = None
+    try:
+        with open(alignment) as f:
+            alignment_data = json.load(f)
+        if not alignment_data:
+             console.print(f"[yellow]Warning:[/yellow] Alignment file '{alignment}' is empty.")
+    except FileNotFoundError:
+        console.print(f"[red]Error:[/red] Alignment file not found: [bold]{alignment}[/bold]")
+        return # Exit if alignment file is missing
+    except json.JSONDecodeError:
+         console.print(f"[red]Error:[/red] Could not decode alignment JSON: [bold]{alignment}[/bold]")
+         return # Exit if JSON is invalid
+
+    # --- Plot Alignment ---
+    console.print("Generating Alignment Plot...")
     plot_alignment(
-        audio,
-        alignment,
+        audio_path=audio,
+        alignments=alignment_data, # Pass loaded data
         output_path=out_dir / "alignment.png",
-        show_plot=show
+        show=show,
+        zoom_start=zoom_start, # Pass zoom params
+        zoom_duration=zoom_duration # Pass zoom params
     )
-    
-    # load alignment data for confidence plot
-    with open(alignment) as f:
-        alignments = json.load(f)
-    
+
+    # --- Plot Silence Regions ---
+    console.print("Generating Silence Regions Plot...")
+    plot_silence_regions(
+        audio_path=audio,
+        output_path=out_dir / "silence.png",
+        show=show,
+        zoom_start=zoom_start,
+        zoom_duration=zoom_duration
+    )
+
+    # --- Plot Alignment Confidence ---
+    console.print("Generating Alignment Confidence Plot...")
     plot_alignment_confidence(
-        alignments,
+        audio_path=audio,
+        alignments=alignment_data, # Pass loaded data
         output_path=out_dir / "confidence.png",
-        show_plot=show
+        show=show,
+        zoom_start=zoom_start, # Pass zoom params
+        zoom_duration=zoom_duration # Pass zoom params
     )
-    
+
+    # --- Plot Alignment Scatter ---
+    # No zoom for scatter plot
+    console.print("Generating Alignment Scatter Plot...")
+    plot_alignment_scatter(
+        alignments=alignment_data, # Pass loaded data
+        output_path=out_dir / "alignment_scatter.png",
+        show=show,
+        title=f"Alignment Scatter: {Path(audio).name}"
+    )
+
     console.print(f"[green]✓[/green] Generated visualizations in [bold]{out_dir}[/bold]")
 
 @main.command()
