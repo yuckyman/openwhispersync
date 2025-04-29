@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Read Along - {{ book_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-files-name="{{ files_name }}" data-alignment-name="{{ alignment_name }}">
+    <h1>Read Along: {{ book_name }}</h1>
+    
+    <div class="controls">
+        <label for="chapter-select">Chapter:</label>
+        <select id="chapter-select">
+            <!-- Options will be populated dynamically -->
+            <option value="1">Chapter 1</option> 
+            <option value="2">Chapter 2</option> 
+            <option value="3">Chapter 3</option> 
+            <option value="4">Chapter 4</option> 
+            <option value="5">Chapter 5</option> 
+            <option value="6">Chapter 6</option> 
+            <option value="7">Chapter 7</option> 
+            <option value="8">Chapter 8</option> 
+            <option value="9">Chapter 9</option> 
+            <option value="10">Chapter 10</option> 
+            <!-- Add more chapters as needed, or fetch dynamically -->
+        </select>
+        <audio id="audio-player" controls preload="metadata"></audio>
+    </div>
+
+    <div id="text-display">
+        <p>Loading text...</p>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html> 

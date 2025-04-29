@@ -1,0 +1,35 @@
+/* Basic styling */
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 20px;
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Add space between control elements */
+}
+
+#audio-player {
+    width: 50%; /* Adjust as needed */
+}
+
+#text-display {
+    border: 1px solid #ccc;
+    padding: 15px;
+    height: 60vh; /* Adjust height as needed */
+    overflow-y: auto;
+    background-color: #f9f9f9;
+}
+
+#text-display p {
+    margin-bottom: 1em; /* Space between paragraphs/sentences */
+    transition: background-color 0.3s ease; /* Smooth transition for highlight */
+}
+
+.highlight {
+    background-color: yellow; /* Highlight style */
+    font-weight: bold;
+} 

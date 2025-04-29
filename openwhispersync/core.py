@@ -56,7 +56,7 @@ def match_text(audio_words: List[Dict],
         silent_regions = features.silent_regions
     
     # create matcher and get results
-    matcher = TextMatcher(audio_words, ebook_sentences)
+    matcher = TextMatcher()  # Just configure with defaults
     results = matcher.match(audio_words, ebook_sentences, silent_regions)
     
     # convert to dict format
@@ -171,87 +171,10 @@ def process_all_chapters(audio_dir: str, output_path: str = None):
     
     return chapters
 
-def match_book(audio_data: Dict, ebook_sentences: List[str], 
-               chapter_markers: Dict[int, Tuple[str, int]], 
-               audio_json_path: str) -> Dict[int, List[Dict]]:
-    """
-    Match entire audiobook with ebook text at once.
-    
-    Args:
-        audio_data: Dict containing chapter transcriptions
-        ebook_sentences: List of all sentences from ebook
-        chapter_markers: Dict mapping sentence indices to chapter markers
-        audio_json_path: Path to the audio JSON file
-        
-    Returns:
-        Dict mapping chapter numbers to alignment results
-    """
-    from .matcher import TextMatcher
-    from .audio import AudioProcessor
-    from pathlib import Path
-    
-    # concatenate all audio words and adjust timestamps
-    all_audio_words = []
-    all_silent_regions = []
-    time_offset = 0.0
-    
-    for chapter in audio_data["chapters"]:
-        # adjust word timestamps
-        for word in chapter["words"]:
-            adjusted_word = word.copy()
-            adjusted_word["start"] += time_offset
-            adjusted_word["end"] += time_offset
-            all_audio_words.append(adjusted_word)
-            
-        # adjust silent region timestamps if they exist
-        if "silent_regions" in chapter:
-            for start, end in chapter["silent_regions"]:
-                all_silent_regions.append((start + time_offset, end + time_offset))
-            
-        time_offset += chapter["duration"]
-    
-    # create matcher and match entire book
-    matcher = TextMatcher(all_audio_words, ebook_sentences)
-    all_results = matcher.match(all_audio_words, ebook_sentences, all_silent_regions)
-    
-    # get chapter boundaries with pre-parsed numbers
-    chapter_boundaries = {
-        num: idx for idx, (_, num) in chapter_markers.items()
-    }
-    
-    # sort chapters by number
-    sorted_chapters = sorted(chapter_boundaries.keys())
-    
-    if not sorted_chapters:
-        logger.warning("No chapter markers found, treating entire book as chapter 1")
-        chapter_results = {1: []}
-        for result in all_results:
-            chapter_results[1].append(result_to_dict(result))
-        return chapter_results
-    
-    # assign results to chapters based on sentence indices
-    chapter_results = {}
-    for result in all_results:
-        # find which chapter this result belongs to
-        chapter_num = 1  # default to first chapter
-        for i in range(len(sorted_chapters) - 1):
-            if (result.sentence_idx >= chapter_boundaries[sorted_chapters[i]] and
-                result.sentence_idx < chapter_boundaries[sorted_chapters[i + 1]]):
-                chapter_num = sorted_chapters[i]
-                break
-        else:
-            chapter_num = sorted_chapters[-1]  # last chapter
-            
-        if chapter_num not in chapter_results:
-            chapter_results[chapter_num] = []
-        chapter_results[chapter_num].append(result_to_dict(result))
-    
-    return chapter_results
-
 def match_chapters(audio_json: str, ebook_path: str, output_dir: str):
     """
-    Match transcribed audio chapters with ebook text.
-    
+    Match transcribed audio chapters with ebook text, processing chapter by chapter.
+
     Args:
         audio_json: Path to JSON file with audio transcriptions
         ebook_path: Path to ebook file
@@ -260,23 +183,119 @@ def match_chapters(audio_json: str, ebook_path: str, output_dir: str):
     import json
     from pathlib import Path
     from .ebook import parse_epub
-    
-    # load audio transcriptions
+    from .matcher import TextMatcher
+    from rich.progress import Progress
+
+    console.print(f"Loading audio transcriptions from [bold]{audio_json}[/bold]...")
     with open(audio_json) as f:
         audio_data = json.load(f)
     
-    # parse ebook
+    console.print(f"Parsing ebook [bold]{ebook_path}[/bold]...")
     ebook_sentences, chapter_markers = parse_epub(ebook_path)
-    
-    # create output directory
+    num_sentences = len(ebook_sentences)
+    console.print(f"Ebook parsed: {num_sentences} sentences, {len(chapter_markers)} markers.")
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create a single matcher instance to reuse
+    matcher = TextMatcher() 
+
+    # --- Determine Chapter Boundaries --- 
+    # Map sentence index to (marker_text, chapter_number)
+    # Chapter number might be None if it's just a marker like 'Title Page'
+    # Use only markers that have a valid chapter number associated
+    chapter_start_indices = sorted([
+        (idx, data[1]) 
+        for idx, data in chapter_markers.items() 
+        if data[1] is not None # Ensure chapter number exists
+    ])
+
+    if not chapter_start_indices:
+        logger.warning("No valid chapter markers found in epub. Treating entire book as Chapter 1.")
+        # Assign chapter 1 to start at sentence 0
+        chapter_start_indices = [(0, 1)]
     
-    # match entire book at once
-    chapter_results = match_book(audio_data, ebook_sentences, chapter_markers, audio_json)
-    
-    # save results for each chapter
-    for chapter_num, results in chapter_results.items():
-        output_path = output_dir / f"chapter_{chapter_num}_alignment.json"
-        with open(output_path, 'w') as f:
-            json.dump(results, f, indent=2) 
+    num_audio_chapters = len(audio_data.get("chapters", []))
+    console.print(f"Matching {num_audio_chapters} audio chapters against {len(chapter_start_indices)} text chapters...")
+
+    # --- Process Chapter by Chapter --- 
+    with Progress() as progress:
+        main_task = progress.add_task("[green]Aligning chapters...", total=len(chapter_start_indices))
+
+        for i, (start_sentence_idx, chapter_num) in enumerate(chapter_start_indices):
+            # Find corresponding audio chapter data
+            # Assuming audio chapter numbers match text chapter numbers (1-based)
+            audio_chapter_data = next((ch for ch in audio_data.get("chapters", []) if ch.get("number") == chapter_num), None)
+
+            if not audio_chapter_data:
+                logger.warning(f"No audio data found for Chapter {chapter_num}. Skipping.")
+                progress.update(main_task, advance=1)
+                continue
+
+            # Define end sentence index for this chapter
+            if i + 1 < len(chapter_start_indices):
+                end_sentence_idx = chapter_start_indices[i+1][0]
+            else:
+                end_sentence_idx = num_sentences # Last chapter goes to the end
+            
+            # --- DEBUGGING: Print calculated slice indices --- 
+            logger.debug(f"Chapter {chapter_num}: Using sentence slice indices {start_sentence_idx} to {end_sentence_idx}")
+            
+            # Slice the ebook sentences for this chapter
+            chapter_sentences = ebook_sentences[start_sentence_idx:end_sentence_idx]
+
+            # --- DEBUGGING: Print actual slice length --- 
+            logger.debug(f"Chapter {chapter_num}: Actual slice length = {len(chapter_sentences)}")
+
+            if not chapter_sentences:
+                logger.warning(f"No ebook sentences found for Chapter {chapter_num} (Indices {start_sentence_idx}-{end_sentence_idx}). Skipping.")
+                progress.update(main_task, advance=1)
+                continue
+
+            # Get audio words and silent regions for this chapter
+            audio_words = audio_chapter_data.get("words", [])
+            silent_regions = audio_chapter_data.get("silent_regions")
+
+            if not audio_words:
+                logger.warning(f"No audio words found for Chapter {chapter_num}. Skipping.")
+                progress.update(main_task, advance=1)
+                continue
+            
+            console.print(f"  Matching Chapter {chapter_num} ({len(audio_words)} words vs {len(chapter_sentences)} sentences)...")
+            
+            # Run the matcher for this chapter
+            # Matcher returns results with sentence_idx relative to chapter_sentences
+            try:
+                chapter_match_results = matcher.match(
+                    audio_words,
+                    chapter_sentences, # Pass only the slice
+                    silent_regions
+                )
+            except Exception as e:
+                logger.error(f"Error matching Chapter {chapter_num}: {e}", exc_info=True)
+                progress.update(main_task, advance=1)
+                continue
+
+            # Adjust sentence indices to be absolute and format results
+            final_results = []
+            for r in chapter_match_results:
+                final_results.append({
+                    'sentence': r.sentence,
+                    'sentence_idx': r.sentence_idx + start_sentence_idx, # Adjust index
+                    'start_time': r.start_time,
+                    'end_time': r.end_time,
+                    'confidence': r.confidence,
+                    'matched_text': r.matched_text,
+                    'is_silence_based': r.is_silence_based
+                })
+
+            # Save results for this chapter
+            output_path = output_dir / f"chapter_{chapter_num}_alignment.json"
+            console.print(f"  Saving alignment for Chapter {chapter_num} to [bold]{output_path}[/bold]")
+            with open(output_path, 'w') as f:
+                json.dump(final_results, f, indent=2)
+            
+            progress.update(main_task, advance=1)
+
+    console.print(f"[green]✓[/green] Chapter alignment complete. Results saved to [bold]{output_dir}[/bold]") 

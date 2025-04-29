@@ -51,6 +51,23 @@ openwhispersync visualize \
   --show
 ```
 
+## Web UI (Read-Along Feature)
+
+This project also includes a simple web-based UI for a synchronized read-along experience.
+
+**To run the web UI:**
+
+1.  **Ensure you have the necessary input files:** Place your EPUB, chapter audio files (e.g., MP3s named like `Chapter_1.mp3`), and the generated chapter alignment JSON files inside the `openwhispersync/files/<book_name>/` directory. You might need to adjust the default book name (`murderbot`) inside `openwhispersync/web_ui.py` or modify the file paths.
+2.  **Navigate to the project root directory** in your terminal (the one containing `pyproject.toml`).
+3.  **Run the web UI script as a module:**
+    ```bash
+    python -m openwhispersync.web_ui
+    ```
+4.  **Open your web browser** and go to:
+    [http://127.0.0.1:5001/](http://127.0.0.1:5001/)
+
+This UI allows you to select a chapter, play the corresponding audio, and see the text highlighted in sync.
+
 ## Features
 
 - **Accurate Transcription**: Uses OpenAI's Whisper (base model) for high-quality transcription

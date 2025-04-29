@@ -50,41 +50,41 @@ def plot_alignment(audio_path: str,
         color = plt.cm.viridis(confidence)  # viridis colormap
         
         # plot alignment bar
-        ax2.barh(i, 
-                align['end'] - align['start'],
-                left=align['start'],
-                color=color,
-                alpha=0.6)
+        ax1.axvspan(
+            align['start_time'],
+            align['end_time'],
+            alpha=0.3,
+            color=color
+        )
         
-        # add sentence text (truncated if too long)
+        # add sentence text (truncated for readability)
         text = align['sentence'][:50] + '...' if len(align['sentence']) > 50 else align['sentence']
-        ax2.text(align['start'], i, text, 
-                va='center', ha='left',
-                fontsize=8)
+        ax1.text(
+            align['start_time'],
+            0.8,
+            text,
+            rotation=90,
+            va='top',
+            ha='right',
+            fontsize=8
+        )
     
-    # customize alignment plot
-    ax2.set_title('Sentence Alignment')
+    # plot confidence scores
+    times = [align['start_time'] for align in alignments]
+    confidences = [align['confidence'] for align in alignments]
+    ax2.plot(times, confidences, 'o-')
+    ax2.set_title('Alignment Confidence Scores')
     ax2.set_xlabel('Time (s)')
-    ax2.set_ylabel('Sentence Index')
-    ax2.set_xlim(0, duration)
-    ax2.grid(True, alpha=0.3)
+    ax2.set_ylabel('Confidence')
+    ax2.set_ylim(0, 1)
     
-    # add confidence colorbar
-    sm = plt.cm.ScalarMappable(cmap='viridis')
-    sm.set_array([])
-    cbar = plt.colorbar(sm, ax=ax2)
-    cbar.set_label('Confidence Score')
-    
-    # adjust layout
+    # save and show
     plt.tight_layout()
-    
-    # save or show plot
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    console.print(f"[green]✓[/green] Saved alignment plot to [bold]{output_path}[/bold]")
+    plt.savefig(output_path)
+    console.print(f"✓ Saved alignment plot to {output_path}")
     
     if show_plot:
         plt.show()
-    
     plt.close()
 
 def plot_silence_regions(audio_path: str,

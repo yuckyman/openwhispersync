@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from datetime import timedelta
+from visualize import plot_alignment
 
 def format_timestamp(seconds):
     """Convert seconds to MM:SS.mmm format"""
@@ -101,6 +102,19 @@ def main():
     args = parser.parse_args()
     
     visualize_alignment(args.alignment_file)
+
+# paths
+audio_path = "openwhispersync/files/murderbot/All Systems Red_Part 06.mp3"
+alignment_path = "openwhispersync/files/murderbot/alignments/chapter_6_alignment.json"
+output_path = "openwhispersync/visualizations/murderbot/chapter_6_alignment.png"
+
+# run visualization
+plot_alignment(
+    audio_path=audio_path,
+    alignment_path=alignment_path,
+    output_path=output_path,
+    show_plot=True
+)
 
 if __name__ == '__main__':
     main() 

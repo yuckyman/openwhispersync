@@ -107,12 +107,7 @@ def align(transcriptions, ebook, out_dir):
     # Create output directory if it doesn't exist
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     
-    with Progress() as progress:
-        task = progress.add_task("[cyan]Matching chapters...", total=None)
-        match_chapters(transcriptions, ebook, out_dir)
-        progress.update(task, completed=True)
-    
-    console.print(f"[green]✓[/green] Alignment complete! Results saved to [bold]{out_dir}[/bold]")
+    match_chapters(transcriptions, ebook, out_dir)
 
 @main.command()
 @click.option("--audio", required=True, help="Path to audio file")
